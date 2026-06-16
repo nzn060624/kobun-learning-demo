@@ -477,7 +477,16 @@
       state.weak = false;
     });
 
-    advanceQuiz();
+    const button = document.getElementById("remove-weak-btn");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "OK！";
+      button.classList.add("is-done");
+    }
+
+    window.setTimeout(() => {
+      advanceQuiz();
+    }, 600);
   }
 
   function advanceQuiz() {
