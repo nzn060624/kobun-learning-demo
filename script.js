@@ -9,24 +9,41 @@
   const STORAGE_KEY = "tachibana-kobun-quiz-state-v1";
   const QUESTIONS_CSV_PATH = "questions.csv";
   const CORRECT_SOUND_PATH = "クイズ正解2.mp3";
+  const INCORRECT_SOUND_PATH = "クイズ不正解1.mp3";
+  const RESULT_SOUND_PATH = "結果画面.mp3";
   const QUIZ_LENGTH = 10;
 
   const CATEGORY_ORDER = [
     "動詞",
     "形容詞/形容動詞",
-    "助動詞",
-    "助詞",
-    "識別",
-    "演習",
+    "助動詞の活用",
+    "助動詞の意味",
   ];
 
   const CATEGORY_TO_SECTIONS = {
     "動詞": ["動詞①", "動詞②"],
     "形容詞/形容動詞": ["形容詞", "形容動詞"],
-    "助動詞": ["助動詞①", "助動詞②"],
-    "助詞": ["助詞①", "助詞②"],
-    "識別": ["識別①", "識別②"],
-    "演習": ["演習①", "演習②"],
+    "助動詞の活用": ["助動詞①", "助動詞②", "助動詞③", "助動詞④", "助動詞⑤", "助動詞⑥"],
+    "助動詞の意味": ["助動詞①", "助動詞②", "助動詞③", "助動詞④", "助動詞⑤", "助動詞⑥"],
+  };
+
+  const SECTION_DESCRIPTIONS = {
+    "動詞|動詞①": "活用の種類",
+    "動詞|動詞②": "活用形",
+    "形容詞/形容動詞|形容詞": "活用形",
+    "形容詞/形容動詞|形容動詞": "活用形",
+    "助動詞の活用|助動詞①": "る,らる,す,さす,しむ",
+    "助動詞の活用|助動詞②": "き,けり,つ,ぬ,たり,り",
+    "助動詞の活用|助動詞③": "む,むず,べし,らむ,けむ",
+    "助動詞の活用|助動詞④": "じ,まじ,ず",
+    "助動詞の活用|助動詞⑤": "まし,めり,らし,なり(伝聞),なり(断定),たり",
+    "助動詞の活用|助動詞⑥": "たし,まほし,ごとし",
+    "助動詞の意味|助動詞①": "る,らる,す,さす,しむ",
+    "助動詞の意味|助動詞②": "き,けり,つ,ぬ,たり,り",
+    "助動詞の意味|助動詞③": "む,むず,べし,らむ,けむ",
+    "助動詞の意味|助動詞④": "じ,まじ,ず",
+    "助動詞の意味|助動詞⑤": "まし,めり,らし,なり(伝聞),なり(断定),たり",
+    "助動詞の意味|助動詞⑥": "たし,まほし,ごとし",
   };
 
   const appState = {
@@ -38,6 +55,8 @@
   };
 
   let correctAudio = null;
+  let incorrectAudio = null;
+  let resultAudio = null;
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -48,7 +67,7 @@
       const questions = await loadQuestionsFromCSV(QUESTIONS_CSV_PATH);
       appState.questions = questions;
       ensureStorageInitialized(questions);
-      prepareCorrectSound();
+      prepareSounds();
       exposeDebugHelpers();
       goTo("home", {}, false);
     } catch (error) {
@@ -69,10 +88,11 @@
 
     return rows.map((row, index) => {
       const question = {
-        id: row.id?.trim() || String(index + 1),
+        id: row.id?.trim() ? `${row.id.trim()}-${index + 1}` : String(index + 1),
         category: row.category?.trim() || "",
         section: row.section?.trim() || "",
         question: row.question?.trim() || "",
+        honbun: row.honbun?.trim() || "",
         choices: [
           row.choice1?.trim() || "",
           row.choice2?.trim() || "",
@@ -294,13 +314,19 @@
     };
   }
 
-  function prepareCorrectSound() {
+  function prepareSounds() {
     try {
       correctAudio = new Audio(CORRECT_SOUND_PATH);
       correctAudio.preload = "auto";
+      incorrectAudio = new Audio(INCORRECT_SOUND_PATH);
+      incorrectAudio.preload = "auto";
+      resultAudio = new Audio(RESULT_SOUND_PATH);
+      resultAudio.preload = "auto";
     } catch (error) {
       console.debug("効果音の事前読み込みをスキップしました", error);
       correctAudio = null;
+      incorrectAudio = null;
+      resultAudio = null;
     }
   }
 
@@ -379,7 +405,6 @@
       currentIndex: 0,
       answers: [],
       isAnsweringLocked: false,
-      countdown: 3,
       timerId: null,
     };
 
@@ -418,6 +443,7 @@
     session.answers.push({
       questionId: current.id,
       question: current.question,
+      honbun: current.honbun,
       answer: current.answer,
       selectedChoice,
       isCorrect,
@@ -426,19 +452,18 @@
 
     if (isCorrect) {
       playCorrectSound();
+    } else {
+      playIncorrectSound();
     }
 
     renderQuizQuestion({ reveal: true, selectedChoice, isCorrect });
 
-    window.setTimeout(() => {
-      session.currentIndex += 1;
-      session.isAnsweringLocked = false;
+    if (session.mode === "weak" && isCorrect && getQuestionState(current.id)?.weak) {
+      return;
+    }
 
-      if (session.currentIndex >= session.questions.length) {
-        finalizeSession();
-      } else {
-        render();
-      }
+    window.setTimeout(() => {
+      advanceQuiz();
     }, 3000);
   }
 
@@ -448,14 +473,24 @@
     if (!current) return;
 
     updateQuestionState(current.id, state => {
+      state.seen = true;
       state.weak = false;
     });
 
-    const button = document.getElementById("remove-weak-btn");
-    if (button) {
-      button.disabled = true;
-      button.textContent = "苦手から外しました";
-      button.classList.add("is-done");
+    advanceQuiz();
+  }
+
+  function advanceQuiz() {
+    const session = appState.session;
+    if (!session) return;
+
+    session.currentIndex += 1;
+    session.isAnsweringLocked = false;
+
+    if (session.currentIndex >= session.questions.length) {
+      finalizeSession();
+    } else {
+      render();
     }
   }
 
@@ -465,19 +500,34 @@
       storage.stats.sessionsPlayed += 1;
       setStorageState(storage);
     }
+    playResultSound();
     goTo("result");
   }
 
   function playCorrectSound() {
+    playSound(correctAudio, CORRECT_SOUND_PATH, fallbackCorrectBeep);
+  }
+
+  function playIncorrectSound() {
+    playSound(incorrectAudio, INCORRECT_SOUND_PATH);
+  }
+
+  function playResultSound() {
+    playSound(resultAudio, RESULT_SOUND_PATH);
+  }
+
+  function playSound(audioElement, path, fallback = null) {
     try {
-      const audio = correctAudio ? correctAudio.cloneNode() : new Audio(CORRECT_SOUND_PATH);
+      const audio = audioElement ? audioElement.cloneNode() : new Audio(path);
       audio.currentTime = 0;
       const playPromise = audio.play();
       if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(() => fallbackCorrectBeep());
+        playPromise.catch(() => {
+          if (fallback) fallback();
+        });
       }
     } catch (error) {
-      fallbackCorrectBeep(error);
+      if (fallback) fallback(error);
     }
   }
 
@@ -599,7 +649,7 @@
     return `
       <section class="screen home-screen">
         <div class="title-block is-centered">
-          <h1 class="app-title">たちばな</h1>
+          <h1 class="app-title">たちばなβ版</h1>
           <div class="app-subtitle">ぜんぶやる古典文法</div>
         </div>
 
@@ -703,6 +753,7 @@
             const questions = filterQuestions({ category, section });
             const stats = getProgressStats(questions);
             const complete = stats.unseen === 0 && stats.weak === 0 && stats.total > 0;
+            const description = SECTION_DESCRIPTIONS[`${category}|${section}`] || "";
 
             return `
               <button class="section-card" data-section="${escapeAttr(section)}" data-category="${escapeAttr(category)}">
@@ -710,6 +761,7 @@
                   <div class="section-card-head">
                     <div class="section-card-title-row">
                       <div class="section-card-title">${escapeHTML(section)}</div>
+                      ${description ? `<div class="section-card-description">${escapeHTML(description)}</div>` : ""}
                       ${complete ? `<div class="complete-label complete-label-inline">COMPLETE！</div>` : ""}
                     </div>
                     <span class="card-arrow section-card-arrow" aria-hidden="true">${renderChevronSVG("right", "card-chevron")}</span>
@@ -755,20 +807,15 @@
       <section class="screen countdown-wrap">
         <div class="countdown-plain">
           <div class="countdown-label">${escapeHTML(label)}</div>
-          <div class="countdown-number">${session.countdown}</div>
+          <div class="start-text">スタート！</div>
         </div>
       </section>
     `;
 
     clearTimeout(session.timerId);
     session.timerId = window.setTimeout(() => {
-      session.countdown -= 1;
-      if (session.countdown <= 0) {
-        goTo("quiz", {}, false);
-      } else {
-        renderCountdown(label);
-      }
-    }, 1000);
+      goTo("quiz", {}, false);
+    }, 2000);
   }
 
   function renderQuizQuestion(revealState = null) {
@@ -799,7 +846,8 @@
         </div>
 
         <section class="card question-card">
-          <div class="question-text">${renderQuestionText(current.question)}</div>
+          <div class="question-lead">${escapeHTML(current.question)}</div>
+          <div class="question-honbun">${formatHonbun(current.honbun)}</div>
           <div class="feedback-overlay ${revealState ? `show ${isCorrect ? "correct" : "incorrect"}` : ""}">
             ${overlayMarkup}
           </div>
@@ -832,12 +880,18 @@
         </div>
 
         <div class="helper-link">
-          <button id="unknown-btn" ${revealState ? "disabled" : ""}>わからない</button>
+          <button class="unknown-btn" id="unknown-btn" ${revealState ? "disabled" : ""}>分からない</button>
         </div>
 
         ${isWeakMode && revealState && isCorrect && getQuestionState(current.id)?.weak ? `
-          <div class="weak-remove-wrap">
-            <button class="inline-btn" id="remove-weak-btn">苦手からはずす</button>
+          <div class="dialog-backdrop" id="weak-dialog">
+            <div class="dialog-card" role="dialog" aria-modal="true">
+              <div class="dialog-title">この問題を苦手からはずしますか？</div>
+              <div class="dialog-btn-column">
+                <button class="dialog-btn dialog-btn-confirm" id="remove-weak-btn">苦手からはずす</button>
+                <button class="dialog-btn dialog-btn-cancel" id="keep-weak-btn">そのまま次へ</button>
+              </div>
+            </div>
           </div>
         ` : ""}
       </section>
@@ -871,7 +925,8 @@
             <div class="result-list">
               ${wrongAnswers.map(item => `
                 <article class="card result-item-card">
-                  <div class="result-card-question">${renderQuestionText(item.question)}</div>
+                  <div class="result-card-question">${escapeHTML(item.question)}</div>
+                  <div class="result-card-honbun">${formatHonbun(item.honbun)}</div>
                   <div class="result-card-answer">
                     <span class="result-answer-label">正解：</span>
                     <span class="result-answer-text">${escapeHTML(item.answer)}</span>
@@ -994,6 +1049,10 @@
     document.getElementById("remove-weak-btn")?.addEventListener("click", () => {
       removeWeakForCurrentQuestion();
     });
+
+    document.getElementById("keep-weak-btn")?.addEventListener("click", () => {
+      advanceQuiz();
+    });
   }
 
   function bindResultEvents() {
@@ -1037,32 +1096,6 @@
     `;
   }
 
-  function renderQuestionText(value) {
-    const text = String(value);
-    let result = "";
-    let index = 0;
-
-    while (index < text.length) {
-      const start = text.indexOf("<", index);
-      if (start === -1) {
-        result += escapeHTML(text.slice(index));
-        break;
-      }
-
-      const end = text.indexOf(">", start + 1);
-      if (end === -1) {
-        result += escapeHTML(text.slice(index));
-        break;
-      }
-
-      result += escapeHTML(text.slice(index, start));
-      result += `<span class="question-underline">${escapeHTML(text.slice(start + 1, end))}</span>`;
-      index = end + 1;
-    }
-
-    return result;
-  }
-
   function renderFeedbackIcon(type) {
     if (type === "correct") {
       return `
@@ -1089,6 +1122,10 @@
       [copied[i], copied[j]] = [copied[j], copied[i]];
     }
     return copied;
+  }
+
+  function formatHonbun(value) {
+    return escapeHTML(value).replace(/&lt;([^&<>]+)&gt;/g, "<u>$1</u>");
   }
 
   function escapeHTML(value) {
