@@ -580,6 +580,7 @@ svg {
   background: #9a9a9a;
   border: 2px solid #9a9a9a;
   color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
   font-weight: 800;
   text-align: center;
 }
@@ -685,7 +686,7 @@ svg {
   font-weight: 800;
   line-height: 1;
   color: #111111;
-  animation: startBounce 0.7s ease-in-out infinite;
+  text-align: center;
 }
 
 .loading-wrap,
@@ -852,18 +853,9 @@ svg {
   color: #ffffff;
 }
 
-#remove-weak-btn:active {
-  transform: none;
-  filter: none;
-}
-
-#remove-weak-btn.is-done {
+.dialog-btn-confirm.is-done {
   background: var(--green);
   color: #ffffff;
-}
-
-#remove-weak-btn.is-done:disabled {
-  opacity: 1;
 }
 
 @keyframes fadeIn {

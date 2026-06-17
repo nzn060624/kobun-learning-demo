@@ -486,7 +486,7 @@
 
     window.setTimeout(() => {
       advanceQuiz();
-    }, 450);
+    }, 600);
   }
 
   function advanceQuiz() {
