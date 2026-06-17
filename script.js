@@ -846,6 +846,18 @@
       overlayMarkup = renderFeedbackIcon(isCorrect ? "correct" : "incorrect");
     }
 
+    const weakDialogMarkup = isWeakMode && revealState && isCorrect && getQuestionState(current.id)?.weak ? `
+      <div class="dialog-backdrop" id="weak-dialog">
+        <div class="dialog-card" role="dialog" aria-modal="true">
+          <div class="dialog-title">この問題を苦手からはずしますか？</div>
+          <div class="dialog-btn-column">
+            <button class="dialog-btn dialog-btn-confirm" id="remove-weak-btn">苦手からはずす</button>
+            <button class="dialog-btn dialog-btn-cancel" id="keep-weak-btn">そのまま次へ</button>
+          </div>
+        </div>
+      </div>
+    ` : "";
+
     screen.innerHTML = `
       <section class="screen">
         <div class="topbar">
@@ -891,19 +903,8 @@
         <div class="helper-link">
           <button class="unknown-btn" id="unknown-btn" ${revealState ? "disabled" : ""}>分からない</button>
         </div>
-
-        ${isWeakMode && revealState && isCorrect && getQuestionState(current.id)?.weak ? `
-          <div class="dialog-backdrop" id="weak-dialog">
-            <div class="dialog-card" role="dialog" aria-modal="true">
-              <div class="dialog-title">この問題を苦手からはずしますか？</div>
-              <div class="dialog-btn-column">
-                <button class="dialog-btn dialog-btn-confirm" id="remove-weak-btn">苦手からはずす</button>
-                <button class="dialog-btn dialog-btn-cancel" id="keep-weak-btn">そのまま次へ</button>
-              </div>
-            </div>
-          </div>
-        ` : ""}
       </section>
+      ${weakDialogMarkup}
     `;
 
     bindQuizEvents(revealState);
