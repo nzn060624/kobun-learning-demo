@@ -867,7 +867,7 @@
         </div>
 
         <section class="card question-card">
-          <div class="question-lead">${escapeHTML(current.question)}</div>
+          <div class="question-lead">${formatHonbun(current.question)}</div>
           <div class="question-honbun">${formatHonbun(current.honbun)}</div>
           <div class="feedback-overlay ${revealState ? `show ${isCorrect ? "correct" : "incorrect"}` : ""}">
             ${overlayMarkup}
@@ -935,7 +935,7 @@
             <div class="result-list">
               ${wrongAnswers.map(item => `
                 <article class="card result-item-card">
-                  <div class="result-card-question">${escapeHTML(item.question)}</div>
+                  <div class="result-card-question">${formatHonbun(item.question)}</div>
                   <div class="result-card-honbun">${formatHonbun(item.honbun)}</div>
                   <div class="result-card-answer">
                     <span class="result-answer-label">正解：</span>
